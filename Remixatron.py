@@ -386,73 +386,40 @@ class InfiniteJukebox(object):
                 break
 
         # truncate the beats to [start:fade + 1]
-        beats = info[self.__start_beat:fade + 1]
+        self.beats = info[self.__start_beat:fade + 1]
 
-        loop_bounds_begin = self.__start_beat
+        self.loop_bounds_begin = self.__start_beat
 
         self.__report_progress( .8, "computing final beat array..." )
 
         # assign final beat ids
-        for beat in beats:
-            beat['id'] = beats.index(beat)
-            beat['quartile'] = beat['id'] // (len(beats) / 4.0)
+        for beat in self.beats:
+            beat['id'] = self.beats.index(beat)
+            beat['quartile'] = beat['id'] // (len(self.beats) / 4.0)
 
-        # compute a coherent 'next' beat to play. This is always just the next ordinal beat
-        # unless we're at the end of the song. Then it gets a little trickier.
-
-        for beat in beats:
-            if beat == beats[-1]:
-
-                # if we're at the last beat, then we want to find a reasonable 'next' beat to play. It should (a) share the
-                # same cluster, (b) be in a logical place in its measure, (c) be after the computed loop_bounds_begin, and
-                # is in the first half of the song. If we can't find such an animal, then just return the beat
-                # at loop_bounds_begin
-
-                beat['next'] = next( (b['id'] for b in beats if b['cluster'] == beat['cluster'] and
-                                      b['id'] % 4 == (beat['id'] + 1) % 4 and
-                                      b['id'] <= (.5 * len(beats)) and
-                                      b['id'] >= loop_bounds_begin), loop_bounds_begin )
-            else:
-                beat['next'] = beat['id'] + 1
-
-            # find all the beats that (a) are in the same cluster as the NEXT oridnal beat, (b) are of the same
-            # cluster position as the next ordinal beat, (c) are in the same place in the measure as the NEXT beat,
-            # (d) but AREN'T the next beat, and (e) AREN'T in the same cluster as the current beat.
-            #
-            # THAT collection of beats contains our jump candidates
-
-            jump_candidates = [bx['id'] for bx in beats[loop_bounds_begin:] if
-                               (bx['cluster'] == beats[beat['next']]['cluster']) and
-                               (bx['is'] == beats[beat['next']]['is']) and
-                               (bx['id'] % 4 == beats[beat['next']]['id'] % 4) and
-                               (bx['segment'] != beat['segment']) and
-                               (bx['id'] != beat['next'])]
-
-            if jump_candidates:
-                beat['jump_candidates'] = jump_candidates
-            else:
-                beat['jump_candidates'] = []
-
+        # compute possible jump locations for each segment of the song
+        self.__compute_jump_candidates()
+        
         # save off the segment count
 
-        self.segments = max([b['segment'] for b in beats]) + 1
+        self.segments = max([b['segment'] for b in self.beats]) + 1
 
         # we don't want to ever play past the point where it's impossible to loop,
         # so let's find the latest point in the song where there are still jump
         # candidates and make sure that we can't play past it.
 
-        last_chance = len(beats) - 1
+        last_chance = len(self.beats) - 1
 
-        for b in reversed(beats):
+        for b in reversed(self.beats):
             if len(b['jump_candidates']) > 0:
-                last_chance = beats.index(b)
+                last_chance = self.beats.index(b)
                 break
 
         # if we play our way to the last beat that has jump candidates, then just skip
         # to the earliest jump candidate rather than enter a section from which no
         # jumping is possible.
 
-        beats[last_chance]['next'] = min(beats[last_chance]['jump_candidates'])
+        self.beats[last_chance]['next'] = min(self.beats[last_chance]['jump_candidates'])
 
         # store the beats that start after the last jumpable point. That's
         # the outro to the song. We can use these
@@ -482,10 +449,10 @@ class InfiniteJukebox(object):
         max_sequence_len = int(round((self.tempo / 120.0) * 48.0))
         max_sequence_len = max_sequence_len - (max_sequence_len % 4)
 
-        min_sequence = max(random.randrange(16, max_sequence_len, 4), loop_bounds_begin)
+        min_sequence = max(random.randrange(16, max_sequence_len, 4), self.loop_bounds_begin)
 
         current_sequence = 0
-        beat = beats[0]
+        beat = self.beats[0]
 
         self.__report_progress( .9, "creating play vector" )
 
@@ -512,7 +479,7 @@ class InfiniteJukebox(object):
         # be boring for the listener. This also has the advantage of busting out of
         # local loops.
 
-        max_beats_between_jumps = int(round(len(beats) * .1))
+        max_beats_between_jumps = int(round(len(self.beats) * .1))
         beats_since_jump = 0
         failed_jumps = 0
 
@@ -535,7 +502,7 @@ class InfiniteJukebox(object):
             if ( will_jump ):
 
                 # find the jump candidates that haven't been recently played
-                non_recent_candidates = [c for c in beat['jump_candidates'] if beats[c]['segment'] not in recent]
+                non_recent_candidates = [c for c in beat['jump_candidates'] if self.beats[c]['segment'] not in recent]
 
                 # if there aren't any good jump candidates, then we need to fall back
                 # to another selection scheme.
@@ -553,16 +520,16 @@ class InfiniteJukebox(object):
                     # playing section. That way we maximize our chances of avoiding a long local loop -- such as
                     # might be found in the section preceeding the outro of a song.
 
-                    non_quartile_candidates = [c for c in beat['jump_candidates'] if beats[c]['quartile'] != beat['quartile']]
+                    non_quartile_candidates = [c for c in beat['jump_candidates'] if self.beats[c]['quartile'] != beat['quartile']]
 
-                    if (failed_jumps >= (.1 * len(beats))) and (len(non_quartile_candidates) > 0):
+                    if (failed_jumps >= (.1 * len(self.beats))) and (len(non_quartile_candidates) > 0):
 
                         furthest_distance = max([abs(beat['id'] - c) for c in non_quartile_candidates])
 
                         jump_to = next(c for c in non_quartile_candidates
                                        if abs(beat['id'] - c) == furthest_distance)
 
-                        beat = beats[jump_to]
+                        beat = self.beats[jump_to]
                         beats_since_jump = 0
                         failed_jumps = 0
 
@@ -570,17 +537,17 @@ class InfiniteJukebox(object):
                     # of the song length. Something is seriously broken. Time
                     # to punt and just start again from the first beat.
 
-                    elif failed_jumps >= (.2 * len(beats)):
+                    elif failed_jumps >= (.2 * len(self.beats)):
                         beats_since_jump = 0
                         failed_jumps = 0
-                        beat = beats[loop_bounds_begin]
+                        beat = beats[self.loop_bounds_begin]
 
                     # asuuming we're not in one of the failure modes but haven't found a good
                     # candidate that hasn't been recently played, just play the next beat in the
                     # sequence
 
                     else:
-                        beat = beats[beat['next']]
+                        beat = self.beats[beat['next']]
 
                 else:
 
@@ -589,7 +556,7 @@ class InfiniteJukebox(object):
 
                     beats_since_jump = 0
                     failed_jumps = 0
-                    beat = beats[ random.choice(non_recent_candidates) ]
+                    beat = self.beats[ random.choice(non_recent_candidates) ]
 
                 # reset our sequence position counter and pick a new target length
                 # between 16 and max_sequence_len, making sure it's evenly divisible by
@@ -615,13 +582,13 @@ class InfiniteJukebox(object):
 
                 # if we're not trying to jump then just add the next item to the play_vector
                 play_vector.append({'beat':beat['next'], 'seq_len': min_sequence, 'seq_pos': current_sequence})
-                beat = beats[beat['next']]
+                beat = self.beats[beat['next']]
                 beats_since_jump += 1
 
         # save off the beats array and play_vector. Signal
         # the play_ready event (if it's been set)
 
-        self.beats = beats
+        #self.beats = beats
         self.play_vector = play_vector
 
         self.__report_progress(1.0, "finished processing")
@@ -903,6 +870,43 @@ class InfiniteJukebox(object):
 
         # return a tuple of (winning cluster size, [array of cluster labels for the beats])
         return (final_cluster_size, labels)
+
+    def __compute_jump_candidates(self):
+        # compute a coherent 'next' beat to play. This is always just the next ordinal beat
+        # unless we're at the end of the song. Then it gets a little trickier.
+
+        for beat in self.beats:
+            if beat == self.beats[-1]:
+
+                # if we're at the last beat, then we want to find a reasonable 'next' beat to play. It should (a) share the
+                # same cluster, (b) be in a logical place in its measure, (c) be after the computed loop_bounds_begin, and
+                # is in the first half of the song. If we can't find such an animal, then just return the beat
+                # at loop_bounds_begin
+
+                beat['next'] = next( (b['id'] for b in self.beats if b['cluster'] == beat['cluster'] and
+                                      b['id'] % 4 == (beat['id'] + 1) % 4 and
+                                      b['id'] <= (.5 * len(self.beats)) and
+                                      b['id'] >= self.loop_bounds_begin), self.loop_bounds_begin )
+            else:
+                beat['next'] = beat['id'] + 1
+
+            # find all the beats that (a) are in the same cluster as the NEXT oridnal beat, (b) are of the same
+            # cluster position as the next ordinal beat, (c) are in the same place in the measure as the NEXT beat,
+            # (d) but AREN'T the next beat, and (e) AREN'T in the same cluster as the current beat.
+            #
+            # THAT collection of beats contains our jump candidates
+
+            jump_candidates = [bx['id'] for bx in self.beats[self.loop_bounds_begin:] if
+                               (bx['cluster'] == self.beats[beat['next']]['cluster']) and
+                               (bx['is'] == self.beats[beat['next']]['is']) and
+                               (bx['id'] % 4 == self.beats[beat['next']]['id'] % 4) and
+                               (bx['segment'] != beat['segment']) and
+                               (bx['id'] != beat['next'])]
+
+            if jump_candidates:
+                beat['jump_candidates'] = jump_candidates
+            else:
+                beat['jump_candidates'] = []
 
     def __add_log(self, line):
         """Convenience method to add debug logging info for later"""
