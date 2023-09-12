@@ -432,6 +432,16 @@ class InfiniteJukebox(object):
         else:
             self.outro = info[outro_start:]
 
+        # compute the play vector
+        self.__find_next_beat()
+
+        self.__report_progress(1.0, "finished processing")
+
+        if self.play_ready:
+            self.play_ready.set()
+
+    def __find_next_beat(self):
+        
         #
         # This section of the code computes the play_vector -- a 1024*1024 beat length
         # remix of the current song.
@@ -483,7 +493,15 @@ class InfiniteJukebox(object):
         beats_since_jump = 0
         failed_jumps = 0
 
-        for i in range(0, 1024 * 1024):
+        
+        # an arbitray length of time
+        # this will be eventually factored out or made changed to be more meaningful
+        # this number should not be to be as it will consume more ram than is necessary.
+        # a exponent of 16 will be about 8 hours for 120bpm songs
+        # a exponent of 20 will be about 5 weeks for 120bpm songs
+        length_of_remix = 2 ** 16
+
+        for i in range(0, length_of_remix):
 
             if beat['segment'] not in recent:
                 recent.append(beat['segment'])
@@ -590,11 +608,6 @@ class InfiniteJukebox(object):
 
         #self.beats = beats
         self.play_vector = play_vector
-
-        self.__report_progress(1.0, "finished processing")
-
-        if self.play_ready:
-            self.play_ready.set()
 
     def __report_progress(self, pct_done, message):
 
