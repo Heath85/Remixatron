@@ -506,6 +506,17 @@ class InfiniteJukebox(object):
             if beat['segment'] not in recent:
                 recent.append(beat['segment'])
 
+            # if we're in the place where we want to jump but can't because
+            # we haven't found any good candidates, then set current_sequence equal to
+            # min_sequence. During playback this will show up as having 00 beats remaining
+            # until we next jump. That's the signal that we'll jump as soon as we possibly can.
+            #
+            # Code that reads play_vector and sees this value can choose to visualize this in some
+            # interesting way.
+
+            if beats_since_jump >= max_beats_between_jumps:
+                current_sequence = min_sequence
+
             current_sequence += 1
 
             # it's time to attempt a jump if we've played all the beats we wanted in the
@@ -523,6 +534,13 @@ class InfiniteJukebox(object):
             
             # since it's time to jump, let's find the most musically pleasing place
             # to go
+
+            # reset our sequence position counter and pick a new target length
+            # between 16 and max_sequence_len, making sure it's evenly divisible by
+            # 4 beats
+
+            current_sequence = 0
+            min_sequence = random.randrange(16, max_sequence_len, 4)
 
             # find the jump candidates that haven't been recently played
             non_recent_candidates = [c for c in beat['jump_candidates'] if self.beats[c]['segment'] not in recent]
@@ -554,6 +572,9 @@ class InfiniteJukebox(object):
                     beat = self.beats[jump_to]
                     beats_since_jump = 0
                     failed_jumps = 0
+                    # add an entry to the play_vector
+                    play_vector.append({'beat':beat['id'], 'seq_len': min_sequence, 'seq_pos': current_sequence})
+                    continue
 
                 # uh oh! That fallback hasn't worked for yet ANOTHER 10%
                 # of the song length. Something is seriously broken. Time
@@ -563,14 +584,19 @@ class InfiniteJukebox(object):
                     beats_since_jump = 0
                     failed_jumps = 0
                     beat = beats[self.loop_bounds_begin]
-
+                    # add an entry to the play_vector
+                    play_vector.append({'beat':beat['id'], 'seq_len': min_sequence, 'seq_pos': current_sequence})
+                    continue
+                
                 # asuuming we're not in one of the failure modes but haven't found a good
                 # candidate that hasn't been recently played, just play the next beat in the
                 # sequence
 
                 else:
                     beat = self.beats[beat['next']]
-
+                    # add an entry to the play_vector
+                    play_vector.append({'beat':beat['id'], 'seq_len': min_sequence, 'seq_pos': current_sequence})
+                    continue
             else:
                 # if it's time to jump and we have at least one good non-recent
                 # candidate, let's just pick randomly from the list and go there
@@ -578,27 +604,12 @@ class InfiniteJukebox(object):
                 beats_since_jump = 0
                 failed_jumps = 0
                 beat = self.beats[ random.choice(non_recent_candidates) ]
+                # add an entry to the play_vector
+                play_vector.append({'beat':beat['id'], 'seq_len': min_sequence, 'seq_pos': current_sequence})
+                continue
+            
 
-            # reset our sequence position counter and pick a new target length
-            # between 16 and max_sequence_len, making sure it's evenly divisible by
-            # 4 beats
-
-            current_sequence = 0
-            min_sequence = random.randrange(16, max_sequence_len, 4)
-
-            # if we're in the place where we want to jump but can't because
-            # we haven't found any good candidates, then set current_sequence equal to
-            # min_sequence. During playback this will show up as having 00 beats remaining
-            # until we next jump. That's the signal that we'll jump as soon as we possibly can.
-            #
-            # Code that reads play_vector and sees this value can choose to visualize this in some
-            # interesting way.
-
-            if beats_since_jump >= max_beats_between_jumps:
-                current_sequence = min_sequence
-
-            # add an entry to the play_vector
-            play_vector.append({'beat':beat['id'], 'seq_len': min_sequence, 'seq_pos': current_sequence})
+            
                       
         # save off the beats array and play_vector. Signal
         # the play_ready event (if it's been set)
