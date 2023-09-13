@@ -548,56 +548,7 @@ class InfiniteJukebox(object):
             # if there aren't any good jump candidates, then we need to fall back
             # to another selection scheme.
 
-            if len(non_recent_candidates) == 0:
-
-                beats_since_jump += 1
-                failed_jumps += 1
-
-                # suppose we've been trying to jump but couldn't find a good non-recent candidate. If
-                # the length of time we've been trying (and failing) is >= 10% of the song length
-                # then it's time to relax our criteria. Let's find the jump candidate that's furthest
-                # from the current beat (irrespective if it's been played recently) and go there. Ideally
-                # we'd like to jump to a beat that is not in the same quartile of the song as the currently
-                # playing section. That way we maximize our chances of avoiding a long local loop -- such as
-                # might be found in the section preceeding the outro of a song.
-
-                non_quartile_candidates = [c for c in beat['jump_candidates'] if self.beats[c]['quartile'] != beat['quartile']]
-
-                if (failed_jumps >= (.1 * len(self.beats))) and (len(non_quartile_candidates) > 0):
-
-                    furthest_distance = max([abs(beat['id'] - c) for c in non_quartile_candidates])
-
-                    jump_to = next(c for c in non_quartile_candidates if abs(beat['id'] - c) == furthest_distance)
-                    
-                    beat = self.beats[jump_to]
-                    beats_since_jump = 0
-                    failed_jumps = 0
-                    # add an entry to the play_vector
-                    play_vector.append({'beat':beat['id'], 'seq_len': min_sequence, 'seq_pos': current_sequence})
-                    continue
-
-                # uh oh! That fallback hasn't worked for yet ANOTHER 10%
-                # of the song length. Something is seriously broken. Time
-                # to punt and just start again from the first beat.
-
-                elif failed_jumps >= (.2 * len(self.beats)):
-                    beats_since_jump = 0
-                    failed_jumps = 0
-                    beat = beats[self.loop_bounds_begin]
-                    # add an entry to the play_vector
-                    play_vector.append({'beat':beat['id'], 'seq_len': min_sequence, 'seq_pos': current_sequence})
-                    continue
-                
-                # asuuming we're not in one of the failure modes but haven't found a good
-                # candidate that hasn't been recently played, just play the next beat in the
-                # sequence
-
-                else:
-                    beat = self.beats[beat['next']]
-                    # add an entry to the play_vector
-                    play_vector.append({'beat':beat['id'], 'seq_len': min_sequence, 'seq_pos': current_sequence})
-                    continue
-            else:
+            if len(non_recent_candidates) > 0:
                 # if it's time to jump and we have at least one good non-recent
                 # candidate, let's just pick randomly from the list and go there
 
@@ -607,9 +558,56 @@ class InfiniteJukebox(object):
                 # add an entry to the play_vector
                 play_vector.append({'beat':beat['id'], 'seq_len': min_sequence, 'seq_pos': current_sequence})
                 continue
-            
 
+            beats_since_jump += 1
+            failed_jumps += 1
+
+            # suppose we've been trying to jump but couldn't find a good non-recent candidate. If
+            # the length of time we've been trying (and failing) is >= 10% of the song length
+            # then it's time to relax our criteria. Let's find the jump candidate that's furthest
+            # from the current beat (irrespective if it's been played recently) and go there. Ideally
+            # we'd like to jump to a beat that is not in the same quartile of the song as the currently
+            # playing section. That way we maximize our chances of avoiding a long local loop -- such as
+            # might be found in the section preceeding the outro of a song.
+
+            non_quartile_candidates = [c for c in beat['jump_candidates'] if self.beats[c]['quartile'] != beat['quartile']]
+
+            length_of_song = len(self.beats)
+
+            # check to see that we're not in one of the failure modes but haven't found a good
+            # candidate that hasn't been recently played, just play the next beat in the
+            # sequence
+            if (failed_jumps < (0.1 * length_of_song)) or ( len(non_quartile_candidates) == 0 and failed_jumps < (0.2 * length_of_song)):
+                beat = self.beats[beat['next']]
+                # add an entry to the play_vector
+                play_vector.append({'beat':beat['id'], 'seq_len': min_sequence, 'seq_pos': current_sequence})
+                continue   
+
+            if (failed_jumps >= (.1 * len(self.beats))) and (len(non_quartile_candidates) > 0):
+
+                furthest_distance = max([abs(beat['id'] - c) for c in non_quartile_candidates])
+
+                jump_to = next(c for c in non_quartile_candidates if abs(beat['id'] - c) == furthest_distance)
+                    
+                beat = self.beats[jump_to]
+                beats_since_jump = 0
+                failed_jumps = 0
+                # add an entry to the play_vector
+                play_vector.append({'beat':beat['id'], 'seq_len': min_sequence, 'seq_pos': current_sequence})
+                continue
+
+            # uh oh! That fallback hasn't worked for yet ANOTHER 10%
+            # of the song length. Something is seriously broken. Time
+            # to punt and just start again from the first beat.
             
+            elif failed_jumps >= (.2 * len(self.beats)):
+                beats_since_jump = 0
+                failed_jumps = 0
+                beat = self.beats[self.loop_bounds_begin]
+                # add an entry to the play_vector
+                play_vector.append({'beat':beat['id'], 'seq_len': min_sequence, 'seq_pos': current_sequence})
+                continue
+                   
                       
         # save off the beats array and play_vector. Signal
         # the play_ready event (if it's been set)
