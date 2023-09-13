@@ -435,14 +435,14 @@ class InfiniteJukebox(object):
         # compute the play vector
         self.__report_progress( .9, "creating play vector" )
 
-        self.__find_next_beat()
+        #self.__find_next_beat()
 
         self.__report_progress(1.0, "finished processing")
 
         if self.play_ready:
             self.play_ready.set()
 
-    def __find_next_beat(self):
+    def find_next_beat(self):
         
         #
         # This section of the code computes the play_vector -- a 1024*1024 beat length
@@ -468,7 +468,7 @@ class InfiniteJukebox(object):
 
         play_vector = []
 
-        play_vector.append( {'beat':0, 'seq_len':min_sequence, 'seq_pos':current_sequence} )
+        yield {'beat':0, 'seq_len':min_sequence, 'seq_pos':current_sequence}
 
         # we want to keep a list of recently played segments so we don't accidentally wind up in a local loop
         #
@@ -527,9 +527,9 @@ class InfiniteJukebox(object):
 
             if (not will_jump):
                 # if we're not trying to jump then just add the next item to the play_vector
-                play_vector.append({'beat':beat['next'], 'seq_len': min_sequence, 'seq_pos': current_sequence})
                 beat = self.beats[beat['next']]
                 beats_since_jump += 1
+                yield {'beat':beat['next'], 'seq_len': min_sequence, 'seq_pos': current_sequence}
                 continue
             
             # since it's time to jump, let's find the most musically pleasing place
@@ -556,7 +556,7 @@ class InfiniteJukebox(object):
                 failed_jumps = 0
                 beat = self.beats[ random.choice(non_recent_candidates) ]
                 # add an entry to the play_vector
-                play_vector.append({'beat':beat['id'], 'seq_len': min_sequence, 'seq_pos': current_sequence})
+                yield {'beat':beat['id'], 'seq_len': min_sequence, 'seq_pos': current_sequence}
                 continue
 
             beats_since_jump += 1
@@ -577,13 +577,13 @@ class InfiniteJukebox(object):
             # check to see that we're not in one of the failure modes but haven't found a good
             # candidate that hasn't been recently played, just play the next beat in the
             # sequence
-            if (failed_jumps < (0.1 * length_of_song)) or ( len(non_quartile_candidates) == 0 and failed_jumps < (0.2 * length_of_song)):
+            if (failed_jumps < (0.1 * length_of_song)) or ( len(non_quartile_candidates) == 0 and (failed_jumps < (0.2 * length_of_song))):
                 beat = self.beats[beat['next']]
                 # add an entry to the play_vector
-                play_vector.append({'beat':beat['id'], 'seq_len': min_sequence, 'seq_pos': current_sequence})
+                yield {'beat':beat['id'], 'seq_len': min_sequence, 'seq_pos': current_sequence}
                 continue   
 
-            if (failed_jumps >= (.1 * len(self.beats))) and (len(non_quartile_candidates) > 0):
+            if (failed_jumps >= (.1 * length_of_song)) and (len(non_quartile_candidates) > 0):
 
                 furthest_distance = max([abs(beat['id'] - c) for c in non_quartile_candidates])
 
@@ -593,14 +593,14 @@ class InfiniteJukebox(object):
                 beats_since_jump = 0
                 failed_jumps = 0
                 # add an entry to the play_vector
-                play_vector.append({'beat':beat['id'], 'seq_len': min_sequence, 'seq_pos': current_sequence})
+                yield {'beat':beat['id'], 'seq_len': min_sequence, 'seq_pos': current_sequence}
                 continue
 
             # uh oh! That fallback hasn't worked for yet ANOTHER 10%
             # of the song length. Something is seriously broken. Time
             # to punt and just start again from the first beat.
             
-            elif failed_jumps >= (.2 * len(self.beats)):
+            if failed_jumps >= (.2 * length_of_song):
                 beats_since_jump = 0
                 failed_jumps = 0
                 beat = self.beats[self.loop_bounds_begin]

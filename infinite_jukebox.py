@@ -297,13 +297,16 @@ if __name__ == "__main__":
     # queue and start playing the first event in the play vector. This is basic
     # audio double buffering that will reduce choppy audio from impercise timings. The
     # goal is to always have one beat in queue to play as soon as the last one is done.
+
+    #generate the first beat of the song 
+    next_beat = next(jukebox.find_next_beat())
     
-    beat_to_play = jukebox.beats[ jukebox.play_vector[0]['beat'] ]
+    beat_to_play = jukebox.beats[next_beat['beat']]
 
     snd = mixer.Sound(buffer=beat_to_play['buffer'])
     channel.queue(snd)
 
-    display_playback_progress(jukebox.play_vector[0])
+    #display_playback_progress(beat_to_play)
 
     # go through the rest of  the playback list, start playing each beat, display
     # the progress and wait for the playback to complete. Playback happens on another
@@ -312,7 +315,7 @@ if __name__ == "__main__":
 
     window.clear()
     
-    for v in jukebox.play_vector[1:]:
+    for v in jukebox.find_next_beat():
 
         while True:
             event = pygame.event.wait(500)
