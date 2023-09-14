@@ -458,17 +458,17 @@ class InfiniteJukebox(object):
         # for popular music. Find that value and round down to the nearest
         # multiple of 4. (There almost always are 4 beats per measure in Western music).
 
-        max_sequence_len = int(round((self.tempo / 120.0) * 48.0))
-        max_sequence_len = max_sequence_len - (max_sequence_len % 4)
+        self.max_sequence_len = int(round((self.tempo / 120.0) * 48.0))
+        self.max_sequence_len = self.max_sequence_len - (self.max_sequence_len % 4)
 
-        min_sequence = max(random.randrange(16, max_sequence_len, 4), self.loop_bounds_begin)
+        self.min_sequence = max(random.randrange(16, self.max_sequence_len, 4), self.loop_bounds_begin)
 
-        current_sequence = 0
+        self.current_sequence = 0
         beat = self.beats[0]
 
         play_vector = []
 
-        yield {'beat':0, 'seq_len':min_sequence, 'seq_pos':current_sequence}
+        yield {'beat':0, 'seq_len': self.min_sequence, 'seq_pos': self.current_sequence}
 
         # we want to keep a list of recently played segments so we don't accidentally wind up in a local loop
         #
@@ -489,20 +489,14 @@ class InfiniteJukebox(object):
         # be boring for the listener. This also has the advantage of busting out of
         # local loops.
 
-        max_beats_between_jumps = int(round(len(self.beats) * .1))
-        beats_since_jump = 0
-        failed_jumps = 0
+        self.max_beats_between_jumps = int(round(len(self.beats) * .1))
+        self.beats_since_jump = 0
+        self.failed_jumps = 0
 
-        
-        # an arbitray length of time
-        # this will be eventually factored out or made changed to be more meaningful
-        # this number should not be to be as it will consume more ram than is necessary.
-        # a exponent of 16 will be about 8 hours for 120bpm songs
-        # a exponent of 20 will be about 5 weeks for 120bpm songs
-        length_of_remix = 2 ** 16
+        while True:
+            #temporary next beat will be overridden if a jump is taken
+            
 
-        for i in range(0, length_of_remix):
-        
             if beat['segment'] not in recent:
                 recent.append(beat['segment'])
 
@@ -514,19 +508,19 @@ class InfiniteJukebox(object):
             # Code that reads play_vector and sees this value can choose to visualize this in some
             # interesting way.
 
-            current_sequence += 1
+            self.current_sequence += 1
 
             # it's time to attempt a jump if we've played all the beats we wanted in the
             # current sequence. Also, if we've gone more than 10% of the length of the song
             # without jumping we need to immediately prioritze jumping to a non-recent segment.
 
-            will_jump = (current_sequence == min_sequence) or (beats_since_jump >= max_beats_between_jumps)
+            will_jump = (self.current_sequence == self.min_sequence) or (self.beats_since_jump >= self.max_beats_between_jumps)
 
             if (not will_jump):
                 # if we're not trying to jump then just add the next item to the play_vector
-                beats_since_jump += 1
-                yield {'beat':beat['next'], 'seq_len': min_sequence, 'seq_pos': current_sequence}
+                self.beats_since_jump += 1
                 beat = self.beats[beat['next']]
+                yield {'beat':beat['id'], 'seq_len': self.min_sequence, 'seq_pos': self.current_sequence}
                 continue
             
             # since it's time to jump, let's find the most musically pleasing place
@@ -535,13 +529,7 @@ class InfiniteJukebox(object):
             # reset our sequence position counter and pick a new target length
             # between 16 and max_sequence_len, making sure it's evenly divisible by
             # 4 beats
-            """
-            current_sequence = 0
-            min_sequence = random.randrange(16, max_sequence_len, 4)
-            
-            if beats_since_jump >= max_beats_between_jumps:
-                current_sequence = min_sequence            
-            """
+
             # find the jump candidates that haven't been recently played
             non_recent_candidates = [c for c in beat['jump_candidates'] if self.beats[c]['segment'] not in recent]
 
@@ -552,20 +540,17 @@ class InfiniteJukebox(object):
                 # if it's time to jump and we have at least one good non-recent
                 # candidate, let's just pick randomly from the list and go there
 
-                beats_since_jump = 0
-                failed_jumps = 0
+                self.beats_since_jump = 0
+                self.failed_jumps = 0
                 beat = self.beats[ random.choice(non_recent_candidates) ]
-                # add an entry to the play_vector
-                current_sequence = 0
-                min_sequence = random.randrange(16, max_sequence_len, 4)
-            
-                if beats_since_jump >= max_beats_between_jumps:
-                    current_sequence = min_sequence            
-                yield {'beat':beat['id'], 'seq_len': min_sequence, 'seq_pos': current_sequence}
+                # add an entry to the play_vector                
+                self.__reset_sequence_counter()
+                
+                yield {'beat':beat['id'], 'seq_len': self.min_sequence, 'seq_pos': self.current_sequence}
                 continue
 
-            beats_since_jump += 1
-            failed_jumps += 1
+            self.beats_since_jump += 1
+            self.failed_jumps += 1
 
             # suppose we've been trying to jump but couldn't find a good non-recent candidate. If
             # the length of time we've been trying (and failing) is >= 10% of the song length
@@ -582,16 +567,15 @@ class InfiniteJukebox(object):
             # check to see that we're not in one of the failure modes but haven't found a good
             # candidate that hasn't been recently played, just play the next beat in the
             # sequence
-            if (failed_jumps < (0.1 * length_of_song)) or ( len(non_quartile_candidates) == 0 and (failed_jumps < (0.2 * length_of_song))):
+            if (self.failed_jumps < (0.1 * length_of_song)) or ( len(non_quartile_candidates) == 0 and (self.failed_jumps < (0.2 * length_of_song))):
                 beat = self.beats[beat['next']]
-                current_sequence = 0
-                min_sequence = random.randrange(16, max_sequence_len, 4)
-                if beats_since_jump >= max_beats_between_jumps:
-                    current_sequence = min_sequence            
-                yield {'beat':beat['id'], 'seq_len': min_sequence, 'seq_pos': current_sequence}
+                
+                self.__reset_sequence_counter()    
+                    
+                yield {'beat':beat['id'], 'seq_len': self.min_sequence, 'seq_pos': self.current_sequence}
                 continue   
 
-            if (failed_jumps >= (.1 * length_of_song)) and (len(non_quartile_candidates) > 0):
+            if (self.failed_jumps >= (.1 * length_of_song)) and (len(non_quartile_candidates) > 0):
 
                 furthest_distance = max([abs(beat['id'] - c) for c in non_quartile_candidates])
 
@@ -599,39 +583,48 @@ class InfiniteJukebox(object):
                     
                 beat = self.beats[jump_to]
                 
-                beats_since_jump = 0
-                failed_jumps = 0
-                current_sequence = 0
-                min_sequence = random.randrange(16, max_sequence_len, 4)           
-                if beats_since_jump >= max_beats_between_jumps:
-                    current_sequence = min_sequence            
-                yield {'beat':beat['id'], 'seq_len': min_sequence, 'seq_pos': current_sequence}
+                self.beats_since_jump = 0
+                self.failed_jumps = 0
+                
+                self.__reset_sequence_counter()    
+                    
+                yield {'beat':beat['id'], 'seq_len': self.min_sequence, 'seq_pos': self.current_sequence}
                 continue
 
             # uh oh! That fallback hasn't worked for yet ANOTHER 10%
             # of the song length. Something is seriously broken. Time
             # to punt and just start again from the first beat.
             
-            if failed_jumps >= (.2 * length_of_song):
+            if self.failed_jumps >= (.2 * length_of_song):
                 beat = self.beats[self.loop_bounds_begin]
 
-                beats_since_jump = 0
-                failed_jumps = 0
+                self.beats_since_jump = 0
+                self.failed_jumps = 0
                 
-                current_sequence = 0
-                min_sequence = random.randrange(16, max_sequence_len, 4)
-                if beats_since_jump >= max_beats_between_jumps:
-                    current_sequence = min_sequence            
-                yield {'beat':beat['id'], 'seq_len': min_sequence, 'seq_pos': current_sequence}
+                self.__reset_sequence_counter()    
+                    
+                yield {'beat':beat['id'], 'seq_len': self.min_sequence, 'seq_pos': self.current_sequence}
                 continue
                    
-                      
-        # save off the beats array and play_vector. Signal
-        # the play_ready event (if it's been set)
 
-        #self.beats = beats
-        self.play_vector = play_vector
+    def __reset_sequence_counter(self):
+        # reset our sequence position counter and pick a new target length
+        # between 16 and max_sequence_len, making sure it's evenly divisible by
+        # 4 beats
+        self.current_sequence = 0
+        self.min_sequence = random.randrange(16, self.max_sequence_len, 4)
 
+        # if we're in the place where we want to jump but can't because
+        # we haven't found any good candidates, then set current_sequence equal to
+        # min_sequence. During playback this will show up as having 00 beats remaining
+        # until we next jump. That's the signal that we'll jump as soon as we possibly can.
+        #
+        # Code that reads play_vector and sees this value can choose to visualize this in some
+        # interesting way.
+        
+        if self.beats_since_jump >= self.max_beats_between_jumps:
+            self.current_sequence = self.min_sequence
+        
     def __report_progress(self, pct_done, message):
 
         """ If a reporting callback was passed, call it in order
