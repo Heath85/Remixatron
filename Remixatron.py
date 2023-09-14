@@ -514,9 +514,6 @@ class InfiniteJukebox(object):
             # Code that reads play_vector and sees this value can choose to visualize this in some
             # interesting way.
 
-            if beats_since_jump >= max_beats_between_jumps:
-                current_sequence = min_sequence
-
             current_sequence += 1
 
             # it's time to attempt a jump if we've played all the beats we wanted in the
@@ -527,9 +524,9 @@ class InfiniteJukebox(object):
 
             if (not will_jump):
                 # if we're not trying to jump then just add the next item to the play_vector
-                beat = self.beats[beat['next']]
                 beats_since_jump += 1
                 yield {'beat':beat['next'], 'seq_len': min_sequence, 'seq_pos': current_sequence}
+                beat = self.beats[beat['next']]
                 continue
             
             # since it's time to jump, let's find the most musically pleasing place
@@ -538,10 +535,13 @@ class InfiniteJukebox(object):
             # reset our sequence position counter and pick a new target length
             # between 16 and max_sequence_len, making sure it's evenly divisible by
             # 4 beats
-
+            """
             current_sequence = 0
             min_sequence = random.randrange(16, max_sequence_len, 4)
-
+            
+            if beats_since_jump >= max_beats_between_jumps:
+                current_sequence = min_sequence            
+            """
             # find the jump candidates that haven't been recently played
             non_recent_candidates = [c for c in beat['jump_candidates'] if self.beats[c]['segment'] not in recent]
 
@@ -556,6 +556,11 @@ class InfiniteJukebox(object):
                 failed_jumps = 0
                 beat = self.beats[ random.choice(non_recent_candidates) ]
                 # add an entry to the play_vector
+                current_sequence = 0
+                min_sequence = random.randrange(16, max_sequence_len, 4)
+            
+                if beats_since_jump >= max_beats_between_jumps:
+                    current_sequence = min_sequence            
                 yield {'beat':beat['id'], 'seq_len': min_sequence, 'seq_pos': current_sequence}
                 continue
 
@@ -579,7 +584,10 @@ class InfiniteJukebox(object):
             # sequence
             if (failed_jumps < (0.1 * length_of_song)) or ( len(non_quartile_candidates) == 0 and (failed_jumps < (0.2 * length_of_song))):
                 beat = self.beats[beat['next']]
-                # add an entry to the play_vector
+                current_sequence = 0
+                min_sequence = random.randrange(16, max_sequence_len, 4)
+                if beats_since_jump >= max_beats_between_jumps:
+                    current_sequence = min_sequence            
                 yield {'beat':beat['id'], 'seq_len': min_sequence, 'seq_pos': current_sequence}
                 continue   
 
@@ -590,9 +598,13 @@ class InfiniteJukebox(object):
                 jump_to = next(c for c in non_quartile_candidates if abs(beat['id'] - c) == furthest_distance)
                     
                 beat = self.beats[jump_to]
+                
                 beats_since_jump = 0
                 failed_jumps = 0
-                # add an entry to the play_vector
+                current_sequence = 0
+                min_sequence = random.randrange(16, max_sequence_len, 4)           
+                if beats_since_jump >= max_beats_between_jumps:
+                    current_sequence = min_sequence            
                 yield {'beat':beat['id'], 'seq_len': min_sequence, 'seq_pos': current_sequence}
                 continue
 
@@ -601,11 +613,16 @@ class InfiniteJukebox(object):
             # to punt and just start again from the first beat.
             
             if failed_jumps >= (.2 * length_of_song):
+                beat = self.beats[self.loop_bounds_begin]
+
                 beats_since_jump = 0
                 failed_jumps = 0
-                beat = self.beats[self.loop_bounds_begin]
-                # add an entry to the play_vector
-                play_vector.append({'beat':beat['id'], 'seq_len': min_sequence, 'seq_pos': current_sequence})
+                
+                current_sequence = 0
+                min_sequence = random.randrange(16, max_sequence_len, 4)
+                if beats_since_jump >= max_beats_between_jumps:
+                    current_sequence = min_sequence            
+                yield {'beat':beat['id'], 'seq_len': min_sequence, 'seq_pos': current_sequence}
                 continue
                    
                       
