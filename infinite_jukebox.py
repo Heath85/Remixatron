@@ -320,19 +320,24 @@ if __name__ == "__main__":
         while True:
             event = pygame.event.wait(500)
 
-            
+            """
+            jukebox.activate_gracefull_quit()
+            window.addstr(1,0,' ' * 40 + "gracefully quiting")
+            """
+
             window.addstr(2,0, get_verbose_info())
             window.addstr(30,0,str(v))
 
             window.addstr(1,0,str(datetime.datetime.now()))
 
             window.refresh()
-            
+                    
             if(event.type == SOUND_FINISHED):
                 beat_to_play = jukebox.beats[ v['beat'] ]
                 snd = mixer.Sound(buffer=beat_to_play['buffer'])
                 channel.queue(snd)
                 break
+                
 
         #print(v, beat_to_play)
         

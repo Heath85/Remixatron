@@ -493,6 +493,8 @@ class InfiniteJukebox(object):
         self.beats_since_jump = 0
         self.failed_jumps = 0
 
+        self.gracefull_quit = False
+
         while True:
             #temporary next beat will be overridden if a jump is taken
             
@@ -514,9 +516,13 @@ class InfiniteJukebox(object):
             # current sequence. Also, if we've gone more than 10% of the length of the song
             # without jumping we need to immediately prioritze jumping to a non-recent segment.
 
-            will_jump = (self.current_sequence == self.min_sequence) or (self.beats_since_jump >= self.max_beats_between_jumps)
+            want_to_jump = (
+                (self.current_sequence == self.min_sequence) or
+                (self.beats_since_jump >= self.max_beats_between_jumps) or
+                (self.gracefull_quit)
+            )
 
-            if (not will_jump):
+            if (not want_to_jump):
                 # if we're not trying to jump then just add the next item to the play_vector
                 self.beats_since_jump += 1
                 beat = self.beats[beat['next']]
@@ -526,9 +532,22 @@ class InfiniteJukebox(object):
             # since it's time to jump, let's find the most musically pleasing place
             # to go
 
-            # reset our sequence position counter and pick a new target length
-            # between 16 and max_sequence_len, making sure it's evenly divisible by
-            # 4 beats
+            
+            # take the largest forward jump
+            if self.gracefull_quit:
+                if len(beat['jump_candidates']) > 0:
+                    biggest_forward_jump = max(beat["jump_candidates"])
+                else:
+                    biggest_forward_jump = beat['next']
+                
+                if biggest_forward_jump > beat['next']:
+                    beat = self.beats[biggest_forward_jump]
+                    yield {'beat':beat['id'], 'seq_len': self.min_sequence, 'seq_pos': self.current_sequence}
+                    continue
+                else:                                      
+                    beat = self.beats[beat['next']]
+                    yield {'beat':beat['id'], 'seq_len': self.min_sequence, 'seq_pos': self.current_sequence}
+                    continue
 
             # find the jump candidates that haven't been recently played
             non_recent_candidates = [c for c in beat['jump_candidates'] if self.beats[c]['segment'] not in recent]
@@ -624,7 +643,10 @@ class InfiniteJukebox(object):
         
         if self.beats_since_jump >= self.max_beats_between_jumps:
             self.current_sequence = self.min_sequence
-        
+
+    def activate_gracefull_quit(self):
+        self.gracefull_quit = True
+            
     def __report_progress(self, pct_done, message):
 
         """ If a reporting callback was passed, call it in order
